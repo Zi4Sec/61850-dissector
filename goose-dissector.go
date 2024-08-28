@@ -1,12 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"encoding/binary"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"unsafe"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -73,26 +73,37 @@ func Capture(pcapFile string) {
 
 func dissector(payload []byte) {
 	counter++
-	if counter == 2 {
+	if counter == 3 {
 		os.Exit(1)
 	}
-	fmt.Println("Goose packet")
-	fmt.Printf("id: %x\n", payload[0:2])
-	fmt.Printf("goose length: %x\n", payload[2:4])
-	fmt.Printf("resv1: %x\n", payload[4:6])
-	fmt.Printf("resv2: %x\n", payload[6:8])
-	fmt.Printf("resv2: %x\n", payload[6:8])
-	// fmt.Printf("goose pdu length: %x\n", payload[9:10])
-	fmt.Printf("goose pdu length: %x\n", payload[10:11])
-
-	var gocbref_len int32
-	err := binary.Read(bytes.NewReader(payload[12:13]), binary.BigEndian, &gocbref_len)
-	if err != nil {
-		fmt.Println("ERR", err)
-		return
-	}
+	index := int64(0)
+	fmt.Printf("id: %d\n", binary.BigEndian.Uint16(payload[index:index+2]))
+	index += 2
+	fmt.Printf("goose length: %d\n", binary.BigEndian.Uint16(payload[index:index+2]))
+	index += 2
+	fmt.Printf("resv1: %x\n", payload[index:index+2])
+	index += 2
+	fmt.Printf("resv2: %x\n", payload[index:index+2])
+	index += 3
+	// fmt.Printf("tag?: %x\n", payload[9:10])
+	fmt.Printf("goose pdu length: %d\n", ByteArrayToInt(payload[index:index+1]))
+	index += 3
+	gocbref_len := ByteArrayToInt(payload[index : index+1])
 	fmt.Printf("gocbref length: %d\n", gocbref_len)
+	fmt.Printf("gocbref: %v\n", string(payload[index:index+gocbref_len]))
 
-	fmt.Printf("gocbref: %x\n", payload[13:(13+gocbref_len)])
+	index += gocbref_len + 2
+	tatl := ByteArrayToInt(payload[index : index+1])
+	fmt.Printf("timeAllowedtoLive length: %d\n", tatl)
+	index += 1
+	fmt.Printf("timeAllowedtoLive: %x, %d\n", payload[index:index+tatl], binary.BigEndian.Uint16(payload[index:index+tatl]))
+}
 
+func ByteArrayToInt(arr []byte) int64 {
+	val := int64(0)
+	size := len(arr)
+	for i := 0; i < size; i++ {
+		*(*uint8)(unsafe.Pointer(uintptr(unsafe.Pointer(&val)) + uintptr(i))) = arr[i]
+	}
+	return val
 }
